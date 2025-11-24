@@ -82,6 +82,20 @@ class GoProDataset(Dataset):
             blur_img = TF.hflip(blur_img)
             sharp_img = TF.hflip(sharp_img)
         
+        # Random vertical flip (only during training)
+        if self.is_train and random.random() > 0.5:
+            blur_img = TF.vflip(blur_img)
+            sharp_img = TF.vflip(sharp_img)
+        
+        # Random Rotation (0, 90, 180, 270)
+        # On choisit aléatoirement un nombre de quarts de tour (0 à 3)
+        k_rot = random.randint(0, 3)
+        if k_rot > 0:
+            # 90 * k_rot
+            angle = k_rot * 90
+            blur_img = TF.rotate(blur_img, angle)
+            sharp_img = TF.rotate(sharp_img, angle)
+        
         # Convert to tensor and normalize to [0, 1]
         blur_tensor = TF.to_tensor(blur_img)  # Converts uint8 [0, 255] to float [0, 1]
         sharp_tensor = TF.to_tensor(sharp_img)
@@ -167,7 +181,7 @@ def get_dataloaders(
     data_root: str = './data',
     batch_size: int = 16,
     patch_size: int = 256,
-    num_workers: int = 4,
+    num_workers: int = 0,
     pin_memory: bool = True,
     full_image: bool = False
 ) -> Tuple[DataLoader, DataLoader]:
