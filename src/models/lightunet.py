@@ -87,7 +87,7 @@ class LightDecoder(nn.Module):
 class LightweightUNet(nn.Module):
     """
     Optimized U-Net for Colab Free Tier.
-    Target: < 2 Million parameters.
+    Target: 3 Million parameters.
     """
     def __init__(self, in_channels=3, out_channels=3, global_residual=True, start_filters=32):
         super().__init__()
