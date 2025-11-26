@@ -207,6 +207,12 @@ def get_dataloaders(
     
     # Use train/ for training and test/ for validation
     # (Competition evaluation will be done separately with evaluate.py)
+
+    # We merge both lists to make our own split
+    # all_blur = train_blur + test_blur
+    # all_sharp = train_sharp + test_sharp
+
+
     train_blur_split = train_blur
     train_sharp_split = train_sharp
     val_blur_split = test_blur
