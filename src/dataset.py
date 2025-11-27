@@ -16,7 +16,8 @@ from torch.utils.data import Dataset, DataLoader
 import torchvision.transforms as transforms
 import torchvision.transforms.functional as TF
 
-
+OLD_SEED = 42
+SEED = 123
 class GoProDataset(Dataset):
     """
     GoPro Image Deblurring Dataset.
@@ -252,7 +253,7 @@ def get_dataloaders(
     print(f"Total séquences vidéo trouvées : {len(seq_names)}")
     
     # 3. On mélange les séquences (pas les images !)
-    random.seed(42)
+    random.seed(SEED)
     random.shuffle(seq_names)
     
     # 4. On coupe les séquences
