@@ -8,10 +8,12 @@ This module provides:
 
 import os
 import random
+from collections import defaultdict
 from typing import List, Tuple
 from PIL import Image
 import torch
 from torch.utils.data import Dataset, DataLoader
+import torchvision.transforms as transforms
 import torchvision.transforms.functional as TF
 
 
@@ -77,24 +79,46 @@ class GoProDataset(Dataset):
             blur_img = TF.crop(blur_img, i, j, h, w)
             sharp_img = TF.crop(sharp_img, i, j, h, w)
         
-        # Random horizontal flip (only during training)
-        if self.is_train and random.random() > 0.5:
-            blur_img = TF.hflip(blur_img)
-            sharp_img = TF.hflip(sharp_img)
+        if self.is_train:
+            # Random horizontal flip (only during training)
+            if random.random() > 0.5:
+                blur_img = TF.hflip(blur_img)
+                sharp_img = TF.hflip(sharp_img)
         
-        # Random vertical flip (only during training)
-        if self.is_train and random.random() > 0.5:
-            blur_img = TF.vflip(blur_img)
-            sharp_img = TF.vflip(sharp_img)
+            # Random vertical flip (only during training)
+            if random.random() > 0.5:
+                blur_img = TF.vflip(blur_img)
+                sharp_img = TF.vflip(sharp_img)
         
-        # Random Rotation (0, 90, 180, 270)
-        # On choisit aléatoirement un nombre de quarts de tour (0 à 3)
-        k_rot = random.randint(0, 3)
-        if k_rot > 0:
-            # 90 * k_rot
-            angle = k_rot * 90
-            blur_img = TF.rotate(blur_img, angle)
-            sharp_img = TF.rotate(sharp_img, angle)
+            # Random Rotation (0, 90, 180, 270)
+            # On choisit aléatoirement un nombre de quarts de tour (0 à 3)
+            k_rot = random.randint(0, 3)
+            if k_rot > 0:
+                # 90 * k_rot
+                angle = k_rot * 90
+                blur_img = TF.rotate(blur_img, angle)
+                sharp_img = TF.rotate(sharp_img, angle)
+            
+            # Random light jittering
+            if random.random() > 0.5:
+                fn_idx, b, c, s, h = transforms.ColorJitter.get_params(
+                brightness=(0.9, 1.1), 
+                contrast=(0.9, 1.1), 
+                saturation=(0.9, 1.1), 
+                hue=None 
+            )
+            
+                # 2. Créer une petite fonction pour appliquer ces paramètres
+                # L'ordre importe peu pour un soft jitter, on fait B -> C -> S
+                def apply_sync_jitter(img, b, c, s):
+                    img = TF.adjust_brightness(img, b)
+                    img = TF.adjust_contrast(img, c)
+                    img = TF.adjust_saturation(img, s)
+                    return img
+                
+                # 3. Appliquer aux deux images
+                blur_img = apply_sync_jitter(blur_img, b, c, s)
+                sharp_img = apply_sync_jitter(sharp_img, b, c, s)
         
         # Convert to tensor and normalize to [0, 1]
         blur_tensor = TF.to_tensor(blur_img)  # Converts uint8 [0, 255] to float [0, 1]
@@ -183,7 +207,8 @@ def get_dataloaders(
     patch_size: int = 256,
     num_workers: int = 0,
     pin_memory: bool = True,
-    full_image: bool = False
+    full_image: bool = False,
+    val_split: float = 0.1
 ) -> Tuple[DataLoader, DataLoader]:
     """
     Create train and validation dataloaders.
@@ -196,7 +221,8 @@ def get_dataloaders(
         val_split: Fraction of training data to use for validation (default: 0.1)
         pin_memory: Whether to pin memory for faster GPU transfer
         full_image: If True, use full resolution images (1280x720) instead of patches
-    
+        val_split: Fraction of training data to use for validation (default: 0.1)
+
     Returns:
         train_loader: DataLoader for training (from train/ folder)
         val_loader: DataLoader for validation (from test/ folder)
@@ -209,25 +235,63 @@ def get_dataloaders(
     # (Competition evaluation will be done separately with evaluate.py)
 
     # We merge both lists to make our own split
-    # all_blur = train_blur + test_blur
-    # all_sharp = train_sharp + test_sharp
+    all_blur = train_blur + test_blur
+    all_sharp = train_sharp + test_sharp
 
-
-    train_blur_split = train_blur
-    train_sharp_split = train_sharp
-    val_blur_split = test_blur
-    val_sharp_split = test_sharp
+    total_images = len(all_blur)
+    print(f"Total images found: {total_images}")
     
+    # Structure : sequences['GOPR0384_11_00'] = [ (img1, sharp1), (img2, sharp2)... ]
+    sequences = defaultdict(list)
+    
+    for b_path, s_path in zip(all_blur, all_sharp):
+        seq_name = os.path.basename(os.path.dirname(os.path.dirname(b_path)))
+        sequences[seq_name].append((b_path, s_path))
+    
+    seq_names = list(sequences.keys())
+    print(f"Total séquences vidéo trouvées : {len(seq_names)}")
+    
+    # 3. On mélange les séquences (pas les images !)
+    random.seed(42)
+    random.shuffle(seq_names)
+    
+    # 4. On coupe les séquences
+    num_val_seqs = max(1, int(len(seq_names) * val_split)) # Au moins 1 séquence
+    num_train_seqs = len(seq_names) - num_val_seqs
+    
+    train_seqs = seq_names[:num_train_seqs]
+    val_seqs = seq_names[num_train_seqs:]
+    
+    print(f"Split par Séquence : {len(train_seqs)} Train / {len(val_seqs)} Val")
+    print(f"Séquences de Validation : {val_seqs}") # Tu sauras quelles vidéos servent de test
+    
+    # 5. On aplatit pour refaire les listes d'images
+    train_blur_final, train_sharp_final = [], []
+    for seq in train_seqs:
+        for b, s in sequences[seq]:
+            train_blur_final.append(b)
+            train_sharp_final.append(s)
+            
+    val_blur_final, val_sharp_final = [], []
+    for seq in val_seqs:
+        for b, s in sequences[seq]:
+            val_blur_final.append(b)
+            val_sharp_final.append(s)
+            
+    
+    print(f"New Split Strategy (Ratio {1.0-val_split:.1f}/{val_split:.1f}):")
+    print(f"  Training:   {len(train_blur_final)} images (Augmented)")
+    print(f"  Validation: {len(val_blur_final)} images (Fixed)")
     # Create datasets
     train_dataset = GoProDataset(
-        train_blur_split, train_sharp_split,
+        train_blur_final, train_sharp_final,
         patch_size=patch_size,
         is_train=True,
         full_image=full_image
     )
     
     val_dataset = GoProDataset(
-        val_blur_split, val_sharp_split,
+        val_blur_final, val_sharp_final,
         patch_size=patch_size,
         is_train=False,  # No augmentation for validation
         full_image=full_image
@@ -274,6 +338,16 @@ if __name__ == "__main__":
     print(f"  Blur: {blur.shape}")
     print(f"  Sharp: {sharp.shape}")
     print(f"  Value range: [{blur.min():.3f}, {blur.max():.3f}]")
+
+    train_dataer, val_dataloader = get_dataloaders(
+        data_root='./data',
+        batch_size=4,
+        patch_size=256,
+        num_workers=0,
+        pin_memory=False,
+        full_image=False,
+        val_split=0.1
+    )
     
     # Test 2: Full image mode
     print("\n--- Test 2: Full Image Mode (1280x720) ---")

@@ -49,3 +49,40 @@ Pour viser > 28.5 dB en validation :
 3.  **Régularisation :**
     * Augmentation du **Weight Decay** de `1e-4` à `1e-3` pour compenser l'augmentation de la taille du modèle et éviter l'overfitting.
     * Ajout de **ColorJitter** (très léger) dans l'augmentation de données pour robustifier le modèle face aux variations colorimétriques.
+
+#### 7. Intermediate Analysis (Run with Cosine Scheduler)
+* **Results Achieved:**
+    * **Validation PSNR:** Reached a stable plateau at **28.03 dB** (Target 28+ reached).
+    * **Train PSNR:** Oscillating around **29.7 dB**.
+    * **Scheduler Behavior:** The switch to `CosineAnnealingLR` is a total success. The learning curve shows a "smooth landing" and much better convergence compared to the previous plateau strategy.
+* **Gap Diagnosis (Generalization Gap ~1.7 dB):**
+    * The model learns well but seems to hit a ceiling in validation.
+    * **Critical Discovery (Bug Fix):** Identified a logic error in `GoProDataset`. Random rotations (0, 90, 180, 270°) were being applied **during validation as well** (missing indentation under `if self.is_train:`).
+    * *Impact:* Validation was artificially noisy and harder than intended, likely underestimating the model's true performance.
+
+#### 8. Optimisation Finale pour la V3 (Objectif 28.5+ dB)
+Pour maximiser la performance et corriger le gap Train/Val, la stratégie suivante est adoptée :
+
+* **A. Correction du Pipeline de Données :**
+    * **Fix Rotation :** Restriction des rotations aléatoires au mode `train` uniquement.
+    * **Fix `ColorJitter` :** Correction du crash `TypeError` sur les paramètres `hue` et implémentation d'une synchronisation manuelle stricte pour garantir que l'image floue et nette subissent exactement la même variation colorimétrique.
+
+* **B. Stratégie "Data Scale-Up" Rigoureuse (Split par Séquence) :**
+    * *Problème Identifié :* Le dataset GoPro est constitué de séquences vidéo. Un "Random Shuffle" simple des images créerait une **fuite de données (Data Leakage)** massive : le modèle verrait la frame $t$ dans le Train et la frame $t+1$ (quasi-identique) dans la Validation, faussant le score. 
+    * *Solution Scientifique :* Adoption d'un **Split par Séquence Vidéo**.
+        * Les images sont groupées par dossier parent (Séquence).
+        * Le mélange et la découpe se font sur les *noms de séquences*, et non sur les images individuelles.
+    * *Action :* Réallocation dynamique de séquences du set de Test original vers le Train pour atteindre un ratio **~90% Train / 10% Val** (au lieu de 66/33).
+    * *Gain Double :*
+        1.  **Performance :** Le modèle s'entraîne sur ~2800 images (+33%), augmentant la diversité des scènes apprises.
+        2.  **Rigueur :** Garantie absolue qu'aucune image de validation ne provient d'une vidéo vue à l'entraînement. La validation teste réellement la généralisation sur une scène inconnue.
+
+* **C. Raffinements de Régularisation :**
+    * **Soft Color Jitter :** Ajout d'une variation aléatoire légère ($\pm 15\%$) de luminosité, contraste et saturation.
+    * *But :* Forcer le modèle à généraliser sur les structures géométriques plutôt que de mémoriser les histogrammes de couleurs spécifiques des scènes GoPro.
+
+* **Configuration Finale Run V3 :**
+    * **Architecture :** `LightweightUNet` (48 filtres initiaux).
+    * **Batch Size :** 8 (avec *Gradient Accumulation* si instable).
+    * **Scheduler :** `CosineAnnealingLR` (T_max=150).
+    * **Dataset :** Split par Séquence 90/10 + Augmentations corrigées.
