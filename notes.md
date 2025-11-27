@@ -86,3 +86,38 @@ Pour maximiser la performance et corriger le gap Train/Val, la stratégie suivan
     * **Batch Size :** 8 (avec *Gradient Accumulation* si instable).
     * **Scheduler :** `CosineAnnealingLR` (T_max=150).
     * **Dataset :** Split par Séquence 90/10 + Augmentations corrigées.
+
+    Voici la mise à jour de ton Carnet de Bord avec les résultats exceptionnels d'aujourd'hui et le plan pour la suite.
+
+
+
+#### 9. Analyse du Run #3 (V3 - "La Percée")
+* **Résultats Exceptionnels :**
+    * **Validation PSNR (Best) :** **31.15 dB** (Objectif initial 28.5 dB explosé de +2.6 dB).
+    * **Full Resolution PSNR (Reality Check) :** **29.57 dB** (Moyenne sur l'ensemble du dataset 1280x720).
+    * *Distribution :* Courbe gaussienne saine, avec des pics de réussite > 35 dB.
+* **Phénomène Notable : Validation > Train**
+    * La courbe de Validation est restée constamment au-dessus de la courbe de Training.
+    * *Interprétation :* Le modèle s'entraîne en "Mode Difficile" (Jitter + Rotations + Random Crops souvent vides/difficiles) et est évalué en "Mode Normal" (Center Crops + Couleurs réelles). Cela confirme une **absence totale d'overfitting** et une excellente robustesse.
+* **Facteurs Clés du Succès :**
+    1.  **Correction Bug Validation :** La suppression des rotations en validation a stabilisé la mesure.
+    2.  **Data Scale-Up :** L'ajout de 33% de données supplémentaires (via le Split par Séquence) a massivement boosté la capacité de généralisation.
+    3.  **Cosine Scheduler :** La courbe de PSNR montre une montée continue jusqu'à la dernière epoch (150), validant que la baisse progressive du Learning Rate a permis de "polir" le résultat final.
+
+#### 10. Prochaines Étapes & Perspectives
+Maintenant que le modèle "Champion" (avec Instance Norm) est sécurisé, l'exploration continue pour tenter d'atteindre la perfection visuelle.
+
+* **A. Le Challenger "No-Norm" (Run V4) :**
+    * *Hypothèse :* La normalisation (`InstanceNorm2d`) stabilise l'entraînement mais peut ternir légèrement les contrastes et les couleurs ("délavage"). Les modèles SOTA (comme EDSR) s'en passent souvent.
+    * *Plan :* Entraîner une version identique à la V3 mais :
+        1.  Suppression de toutes les couches de Normalisation.
+        2.  Réactivation des **Biais** (`bias=True`) dans les convolutions (crucial sans norm).
+        3.  Diminution préventive du LR (`1e-4`) pour éviter la divergence.
+    * *But :* Comparer visuellement si la netteté (sharpness) est supérieure au modèle V3.
+
+* **B. Pipeline d'Inférence & Livraison :**
+    * Création d'un script `inference.py` robuste capable de charger le modèle et traiter des images de Test inconnues (512x512 ou HD).
+    * Intégration systématique de la stratégie de **Tiling** (découpage avec overlap) pour traiter n'importe quelle résolution sans saturation mémoire.
+
+* **C. Amélioration du Reporting :**
+    * Ajout d'une **Baseline** dans les graphiques : Tracer le PSNR de l'image floue originale ("Input PSNR") pour visualiser le **Delta** réel apporté par le modèle (ex: +5 dB) plutôt qu'un chiffre absolu.
