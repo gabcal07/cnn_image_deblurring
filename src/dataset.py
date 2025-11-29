@@ -18,16 +18,19 @@ import torchvision.transforms.functional as TF
 
 OLD_SEED = 42
 SEED = 123
+
+
 class GoProDataset(Dataset):
     """
     GoPro Image Deblurring Dataset.
-    
+
     Features:
     - On-the-fly random cropping (256x256 patches from 1280x720 images)
-    - Random horizontal flip augmentation
+    - Center cropping for validation set
+    - Random horizontal flip augmentation / 90 degrees rotation / color jittering
     - Normalization to [0, 1] range
     - Optional full-resolution mode (no cropping)
-    
+
     Args:
         blur_paths: List of paths to blurred images
         sharp_paths: List of paths to sharp (ground truth) images
@@ -35,38 +38,40 @@ class GoProDataset(Dataset):
         is_train: If True, apply augmentation; if False, use center crop
         full_image: If True, use full resolution (no cropping). Default: False
     """
-    
+
     def __init__(
         self,
         blur_paths: List[str],
         sharp_paths: List[str],
         patch_size: int = 256,
         is_train: bool = True,
-        full_image: bool = False
+        full_image: bool = False,
     ):
-        assert len(blur_paths) == len(sharp_paths), "Mismatch between blur and sharp image counts"
-        
+        assert len(blur_paths) == len(sharp_paths), (
+            "Mismatch between blur and sharp image counts"
+        )
+
         self.blur_paths = blur_paths
         self.sharp_paths = sharp_paths
         self.patch_size = patch_size
         self.is_train = is_train
         self.full_image = full_image
-        
+
     def __len__(self) -> int:
         return len(self.blur_paths)
-    
+
     def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Load and process a single image pair.
-        
+
         Returns:
             blur: Blurred image tensor (C, H, W) in range [0, 1]
             sharp: Sharp image tensor (C, H, W) in range [0, 1]
         """
         # Load images as PIL
-        blur_img = Image.open(self.blur_paths[idx]).convert('RGB')
-        sharp_img = Image.open(self.sharp_paths[idx]).convert('RGB')
-        
+        blur_img = Image.open(self.blur_paths[idx]).convert("RGB")
+        sharp_img = Image.open(self.sharp_paths[idx]).convert("RGB")
+
         # Apply cropping only if not using full images
         if not self.full_image:
             # Apply cropping (random for train, center for val/test)
@@ -76,21 +81,21 @@ class GoProDataset(Dataset):
             else:
                 # Center crop for validation/test
                 i, j, h, w = self._get_center_crop_params(blur_img)
-            
+
             blur_img = TF.crop(blur_img, i, j, h, w)
             sharp_img = TF.crop(sharp_img, i, j, h, w)
-        
+
         if self.is_train:
             # Random horizontal flip (only during training)
             if random.random() > 0.5:
                 blur_img = TF.hflip(blur_img)
                 sharp_img = TF.hflip(sharp_img)
-        
+
             # Random vertical flip (only during training)
             if random.random() > 0.5:
                 blur_img = TF.vflip(blur_img)
                 sharp_img = TF.vflip(sharp_img)
-        
+
             # Random Rotation (0, 90, 180, 270)
             # On choisit aléatoirement un nombre de quarts de tour (0 à 3)
             k_rot = random.randint(0, 3)
@@ -99,16 +104,16 @@ class GoProDataset(Dataset):
                 angle = k_rot * 90
                 blur_img = TF.rotate(blur_img, angle)
                 sharp_img = TF.rotate(sharp_img, angle)
-            
+
             # Random light jittering
             if random.random() > 0.5:
                 fn_idx, b, c, s, h = transforms.ColorJitter.get_params(
-                brightness=(0.9, 1.1), 
-                contrast=(0.9, 1.1), 
-                saturation=(0.9, 1.1), 
-                hue=None 
-            )
-            
+                    brightness=(0.9, 1.1),
+                    contrast=(0.9, 1.1),
+                    saturation=(0.9, 1.1),
+                    hue=None,
+                )
+
                 # 2. Créer une petite fonction pour appliquer ces paramètres
                 # L'ordre importe peu pour un soft jitter, on fait B -> C -> S
                 def apply_sync_jitter(img, b, c, s):
@@ -116,104 +121,104 @@ class GoProDataset(Dataset):
                     img = TF.adjust_contrast(img, c)
                     img = TF.adjust_saturation(img, s)
                     return img
-                
+
                 # 3. Appliquer aux deux images
                 blur_img = apply_sync_jitter(blur_img, b, c, s)
                 sharp_img = apply_sync_jitter(sharp_img, b, c, s)
-        
+
         # Convert to tensor and normalize to [0, 1]
         blur_tensor = TF.to_tensor(blur_img)  # Converts uint8 [0, 255] to float [0, 1]
         sharp_tensor = TF.to_tensor(sharp_img)
-        
+
         return blur_tensor, sharp_tensor
-    
+
     def _get_random_crop_params(self, img: Image.Image) -> Tuple[int, int, int, int]:
         """
         Get random crop parameters.
-        
+
         Returns:
             (top, left, height, width) for cropping
         """
         width, height = img.size
-        
+
         # Ensure the image is large enough
         if width < self.patch_size or height < self.patch_size:
             raise ValueError(
                 f"Image size ({width}x{height}) is smaller than patch size ({self.patch_size})"
             )
-        
+
         # Random top-left corner
         top = random.randint(0, height - self.patch_size)
         left = random.randint(0, width - self.patch_size)
-        
+
         return top, left, self.patch_size, self.patch_size
-    
+
     def _get_center_crop_params(self, img: Image.Image) -> Tuple[int, int, int, int]:
         """
         Get center crop parameters.
-        
+
         Returns:
             (top, left, height, width) for cropping
         """
         width, height = img.size
-        
+
         top = (height - self.patch_size) // 2
         left = (width - self.patch_size) // 2
-        
+
         return top, left, self.patch_size, self.patch_size
 
 
-def get_image_pairs(root_dir: str, split: str = 'train') -> Tuple[List[str], List[str]]:
+def get_image_pairs(root_dir: str, split: str = "train") -> Tuple[List[str], List[str]]:
     """
     Recursively find blur-sharp image pairs in the dataset.
-    
+
     Args:
         root_dir: Root directory of the dataset (e.g., './data')
         split: 'train' or 'test'
-    
+
     Returns:
         blur_paths: List of paths to blurred images
         sharp_paths: List of paths to sharp images
     """
     blur_paths = []
     sharp_paths = []
-    
+
     split_dir = os.path.join(root_dir, split)
-    
+
     if not os.path.exists(split_dir):
         raise FileNotFoundError(f"Directory {split_dir} does not exist")
-    
+
     # Walk through sequence folders (each represents frames from a GoPro video)
     for sequence_folder in sorted(os.listdir(split_dir)):
         sequence_path = os.path.join(split_dir, sequence_folder)
         if not os.path.isdir(sequence_path):
             continue
-        
-        blur_dir = os.path.join(sequence_path, 'blur')
-        sharp_dir = os.path.join(sequence_path, 'sharp')
-        
+
+        blur_dir = os.path.join(sequence_path, "blur")
+        sharp_dir = os.path.join(sequence_path, "sharp")
+
         if os.path.exists(blur_dir) and os.path.exists(sharp_dir):
             images = sorted(os.listdir(blur_dir))
             for img_name in images:
-                if img_name.endswith('.png'):
+                if img_name.endswith(".png"):
                     blur_paths.append(os.path.join(blur_dir, img_name))
                     sharp_paths.append(os.path.join(sharp_dir, img_name))
-    
+
     return blur_paths, sharp_paths
 
 
 def get_dataloaders(
-    data_root: str = './data',
+    data_root: str = "./data",
     batch_size: int = 16,
     patch_size: int = 256,
     num_workers: int = 0,
     pin_memory: bool = True,
     full_image: bool = False,
-    val_split: float = 0.1
+    val_split: float = 0.1,
 ) -> Tuple[DataLoader, DataLoader]:
     """
     Create train and validation dataloaders.
-    
+
     Args:
         data_root: Root directory of the dataset
         batch_size: Batch size for training
@@ -229,9 +234,9 @@ def get_dataloaders(
         val_loader: DataLoader for validation (from test/ folder)
     """
     # Load all image paths
-    train_blur, train_sharp = get_image_pairs(data_root, 'train')
-    test_blur, test_sharp = get_image_pairs(data_root, 'test')
-    
+    train_blur, train_sharp = get_image_pairs(data_root, "train")
+    test_blur, test_sharp = get_image_pairs(data_root, "test")
+
     # Use train/ for training and test/ for validation
     # (Competition evaluation will be done separately with evaluate.py)
 
@@ -241,118 +246,131 @@ def get_dataloaders(
 
     total_images = len(all_blur)
     print(f"Total images found: {total_images}")
-    
+
     # Structure : sequences['GOPR0384_11_00'] = [ (img1, sharp1), (img2, sharp2)... ]
     sequences = defaultdict(list)
-    
+
     for b_path, s_path in zip(all_blur, all_sharp):
         seq_name = os.path.basename(os.path.dirname(os.path.dirname(b_path)))
         sequences[seq_name].append((b_path, s_path))
-    
+
     seq_names = list(sequences.keys())
     print(f"Total séquences vidéo trouvées : {len(seq_names)}")
-    
-    # 3. On mélange les séquences (pas les images !)
+
+    # 3. Mix the video sequences (not the images to prevent data leakage)
     random.seed(SEED)
     random.shuffle(seq_names)
-    
-    # 4. On coupe les séquences
-    num_val_seqs = max(1, int(len(seq_names) * val_split)) # Au moins 1 séquence
+
+    # 4. Cut the sequences
+    num_val_seqs = max(1, int(len(seq_names) * val_split))  # Au moins 1 séquence
     num_train_seqs = len(seq_names) - num_val_seqs
-    
+
     train_seqs = seq_names[:num_train_seqs]
     val_seqs = seq_names[num_train_seqs:]
-    
+
     print(f"Split par Séquence : {len(train_seqs)} Train / {len(val_seqs)} Val")
-    print(f"Séquences de Validation : {val_seqs}") # Tu sauras quelles vidéos servent de test
-    
-    # 5. On aplatit pour refaire les listes d'images
+    print(
+        f"Séquences de Validation : {val_seqs}"
+    )  # Tu sauras quelles vidéos servent de test
+
+    # 5. Flatten to recreate image lists
     train_blur_final, train_sharp_final = [], []
     for seq in train_seqs:
         for b, s in sequences[seq]:
             train_blur_final.append(b)
             train_sharp_final.append(s)
-            
+
     val_blur_final, val_sharp_final = [], []
     for seq in val_seqs:
         for b, s in sequences[seq]:
             val_blur_final.append(b)
             val_sharp_final.append(s)
-            
-    
-    print(f"New Split Strategy (Ratio {1.0-val_split:.1f}/{val_split:.1f}):")
+
+    print(f"New Split Strategy (Ratio {1.0 - val_split:.1f}/{val_split:.1f}):")
     print(f"  Training:   {len(train_blur_final)} images (Augmented)")
     print(f"  Validation: {len(val_blur_final)} images (Fixed)")
-    # Create datasets
+    # 6. Create datasets
     train_dataset = GoProDataset(
-        train_blur_final, train_sharp_final,
+        train_blur_final,
+        train_sharp_final,
         patch_size=patch_size,
         is_train=True,
-        full_image=full_image
+        full_image=full_image,
     )
-    
+
     val_dataset = GoProDataset(
-        val_blur_final, val_sharp_final,
+        val_blur_final,
+        val_sharp_final,
         patch_size=patch_size,
         is_train=False,  # No augmentation for validation
-        full_image=full_image
+        full_image=full_image,
     )
-    
-    # Create dataloaders
+
+    # 7. Create dataloaders
     train_loader = DataLoader(
         train_dataset,
         batch_size=batch_size,
         shuffle=True,
         num_workers=num_workers,
-        pin_memory=pin_memory
+        pin_memory=pin_memory,
     )
-    
+
     val_loader = DataLoader(
         val_dataset,
         batch_size=batch_size,
         shuffle=False,
         num_workers=num_workers,
-        pin_memory=pin_memory
+        pin_memory=pin_memory,
     )
-    
-    img_size = "Full (1280x720)" if full_image else f"Patches ({patch_size}x{patch_size})"
+
+    img_size = (
+        "Full (1280x720)" if full_image else f"Patches ({patch_size}x{patch_size})"
+    )
     print(f"\n=== {img_size} ===")
     print("Dataset sizes:")
     print(f"  Train: {len(train_dataset)} images (train/ folder)")
     print(f"  Val: {len(val_dataset)} images (test/ folder)")
-    
+
     return train_loader, val_loader
 
 
 if __name__ == "__main__":
     # Test the dataset
     print("Testing GoProDataset...")
-    
+
     # Load a small subset for testing
-    train_blur, train_sharp = get_image_pairs('./data', 'train')
+    train_blur, train_sharp = get_image_pairs("./data", "train")
     print(f"Found {len(train_blur)} training pairs")
-    
+
     # Test 1: Patch mode
     print("\n--- Test 1: Patch Mode (256x256) ---")
-    dataset_patch = GoProDataset(train_blur[:10], train_sharp[:10], patch_size=256, is_train=True, full_image=False)
+    dataset_patch = GoProDataset(
+        train_blur[:10],
+        train_sharp[:10],
+        patch_size=256,
+        is_train=True,
+        full_image=False,
+    )
     blur, sharp = dataset_patch[0]
     print(f"  Blur: {blur.shape}")
     print(f"  Sharp: {sharp.shape}")
     print(f"  Value range: [{blur.min():.3f}, {blur.max():.3f}]")
 
     train_dataer, val_dataloader = get_dataloaders(
-        data_root='./data',
+        data_root="./data",
         batch_size=4,
         patch_size=256,
         num_workers=0,
         pin_memory=False,
         full_image=False,
-        val_split=0.1
+        val_split=0.1,
     )
-    
+
     # Test 2: Full image mode
     print("\n--- Test 2: Full Image Mode (1280x720) ---")
-    dataset_full = GoProDataset(train_blur[:10], train_sharp[:10], is_train=False, full_image=True)
+    dataset_full = GoProDataset(
+        train_blur[:10], train_sharp[:10], is_train=False, full_image=True
+    )
     blur, sharp = dataset_full[0]
     print(f"  Blur: {blur.shape}")
     print(f"  Sharp: {sharp.shape}")

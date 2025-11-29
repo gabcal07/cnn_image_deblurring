@@ -4,31 +4,55 @@ from PIL import Image
 import argparse
 import os
 import sys
+import matplotlib.pyplot as plt
 
-# Assure-toi que Python trouve tes modules src
 sys.path.append(os.getcwd())
 
-# Importe ta classe modèle (adapte le chemin selon ta structure)
-# from src.model import LightweightUNet 
-# Si tu n'as pas séparé le fichier, tu peux coller la classe LightweightUNet ici directement.
 
 def load_image(path):
-    img = Image.open(path).convert('RGB')
-    return TF.to_tensor(img).unsqueeze(0) # (1, C, H, W)
+    img = Image.open(path).convert("RGB")
+    return TF.to_tensor(img).unsqueeze(0)  # (1, C, H, W)
+
 
 def save_image(tensor, path):
     img = TF.to_pil_image(tensor.squeeze(0).cpu().clamp(0, 1))
     img.save(path)
-    print(f"✅ Image sauvegardée : {path}")
+    print(f"Image sauvegardée : {path}")
 
-def predict_tiled(model, image_tensor, tile_size=512, overlap=64, device='cpu'):
+
+def save_comparison(input_tensor, output_tensor, path):
+    input_img = input_tensor.squeeze(0).cpu().permute(1, 2, 0).clamp(0, 1).numpy()
+    output_img = output_tensor.squeeze(0).cpu().permute(1, 2, 0).clamp(0, 1).numpy()
+
+    fig, axes = plt.subplots(1, 2, figsize=(12, 6))
+    axes[0].imshow(input_img)
+    axes[0].set_title("Blurred Input")
+    axes[0].axis("off")
+
+    axes[1].imshow(output_img)
+    axes[1].set_title("Deblurred Output")
+    axes[1].axis("off")
+
+    plt.tight_layout()
+    plt.savefig(path)
+    plt.close()
+    print(f"Comparison saved : {path}")
+
+
+def predict_tiled(model, image_tensor, tile_size=512, overlap=64, device="cpu"):
     """Inférence intelligente par tuilage pour la HD/4K"""
     model.eval()
     b, c, h, w = image_tensor.shape
+
+    # Optimization: If image is 512x512, predict in one go
+    if h == 512 and w == 512:
+        with torch.no_grad():
+            return model(image_tensor.to(device))
+
     output = torch.zeros((b, c, h, w), device=device)
     count_map = torch.zeros((b, 1, h, w), device=device)
     stride = tile_size - overlap
-    
+
     with torch.no_grad():
         for y in range(0, h, stride):
             for x in range(0, w, stride):
@@ -36,73 +60,98 @@ def predict_tiled(model, image_tensor, tile_size=512, overlap=64, device='cpu'):
                 x_end = min(x + tile_size, w)
                 y_start = max(0, y_end - tile_size)
                 x_start = max(0, x_end - tile_size)
-                
+
                 input_tile = image_tensor[:, :, y_start:y_end, x_start:x_end].to(device)
                 pred_tile = model(input_tile)
-                
+
                 output[:, :, y_start:y_end, x_start:x_end] += pred_tile
                 count_map[:, :, y_start:y_end, x_start:x_end] += 1.0
-                
+
     return output / count_map
 
+
 def main():
-    parser = argparse.ArgumentParser(description="Deblur images using Lightweight U-Net")
-    parser.add_argument('--input', type=str, required=True, help="Path to blurred image")
-    parser.add_argument('--output', type=str, default='result.png', help="Path to save result")
-    parser.add_argument('--model', type=str, default='experiments/best_model.pth', help="Path to .pth checkpoint")
-    parser.add_argument('--device', type=str, default='mps', help="Device (cuda, mps, cpu)")
+    parser = argparse.ArgumentParser(
+        description="Deblur images using Lightweight U-Net"
+    )
+    parser.add_argument(
+        "--input", type=str, required=True, help="Path to blurred image"
+    )
+    parser.add_argument(
+        "--output", type=str, default="result.png", help="Path to save result"
+    )
+    parser.add_argument(
+        "--model",
+        type=str,
+        default="experiments/unet_light_v3_42/best_model.pth",
+        help="Path to .pth checkpoint",
+    )
+    parser.add_argument(
+        "--device", type=str, default="mps", help="Device (cuda, mps, cpu)"
+    )
+    parser.add_argument(
+        "--test",
+        action="store_true",
+        help="Save comparison figure instead of just output",
+    )
     args = parser.parse_args()
 
     # 1. Device Setup
-    if args.device == 'mps' and not torch.backends.mps.is_available():
-        print("⚠️ MPS not available, switching to CPU")
-        device = torch.device('cpu')
+    if args.device == "mps" and not torch.backends.mps.is_available():
+        print("MPS not available, switching to CPU")
+        device = torch.device("cpu")
     else:
         device = torch.device(args.device)
     print(f"Using device: {device}")
 
     # 2. Load Model
-    # Important : Il faut que les paramètres (48 filtres vs 32) correspondent à ton entraînement !
-    # Si tu as changé start_filters, mets-le à jour ici.
     print("Loading model...")
     try:
-        # Pense à importer ta classe LightweightUNet ou à la définir ici
-        from src.model import LightweightUNet 
-        model = LightweightUNet(in_channels=3, out_channels=3) 
-        
+        from src.models.lightunet import LightweightUNet
+
+        model = LightweightUNet(
+            in_channels=3, out_channels=3, global_residual=True, start_filters=48
+        )
+
         # Gestion du chargement (parfois le state_dict est imbriqué sous 'model_state_dict')
         checkpoint = torch.load(args.model, map_location=device)
-        if 'model_state_dict' in checkpoint:
-            state_dict = checkpoint['model_state_dict']
+        if "model_state_dict" in checkpoint:
+            state_dict = checkpoint["model_state_dict"]
         else:
             state_dict = checkpoint
-            
+
         model.load_state_dict(state_dict)
         model.to(device)
         model.eval()
     except Exception as e:
-        print(f"❌ Erreur chargement modèle : {e}")
+        print(f"Erreur chargement modèle : {e}")
         return
 
     # 3. Process
     if os.path.isdir(args.input):
-        # Si c'est un dossier, on traite tout
         print(f"Processing folder: {args.input}")
         os.makedirs(args.output, exist_ok=True)
         for filename in os.listdir(args.input):
-            if filename.lower().endswith(('.png', '.jpg', '.jpeg')):
+            if filename.lower().endswith((".png", ".jpg", ".jpeg")):
                 in_path = os.path.join(args.input, filename)
                 out_path = os.path.join(args.output, f"deblurred_{filename}")
-                
+
                 img = load_image(in_path)
                 res = predict_tiled(model, img, device=device)
-                save_image(res, out_path)
+                if args.test:
+                    save_comparison(img, res, out_path)
+                else:
+                    save_image(res, out_path)
     else:
         # Image unique
         print(f"Processing file: {args.input}")
         img = load_image(args.input)
         res = predict_tiled(model, img, device=device)
-        save_image(res, args.output)
+        if args.test:
+            save_comparison(img, res, args.output)
+        else:
+            save_image(res, args.output)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()
