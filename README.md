@@ -35,7 +35,10 @@ We adopted a U-Net architecture modified for efficiency. The core innovation lie
 *Figure 6: Animation illustrating the Depthwise Separable Convolution process.*
 
 A standard convolution with kernel size $K \times K$, $C_{in}$ input channels, and $C_{out}$ output channels has a computational cost proportional to:
-$$ P_{std} = K^2 \cdot C_{in} \cdot C_{out} $$
+
+```math
+P_{std} = K^2 \cdot C_{in} \cdot C_{out}
+```
 
 A DSConv splits this operation into two distinct layers:
 1.  **Depthwise Convolution:** Applies a single filter per input channel ($C_{in}$ groups).
@@ -45,7 +48,10 @@ A DSConv splits this operation into two distinct layers:
 *Figure 7: Detailed structure of the DSConv block and the LightResBlock.*
 
 The parameter count becomes:
-$$ P_{ds} = (K^2 \cdot C_{in}) + (C_{in} \cdot C_{out}) $$
+
+```math
+P_{ds} = (K^2 \cdot C_{in}) + (C_{in} \cdot C_{out})
+```
 
 For a $3 \times 3$ kernel, this yields a reduction factor of approximately $\frac{1}{8}$ to $\frac{1}{9}$, allowing us to increase the network depth and width (starting filters = 48) without exploding the model size.
 
@@ -53,7 +59,11 @@ For a $3 \times 3$ kernel, this yields a reduction factor of approximately $\fra
 We observed in early experiments (Run V1) that standard U-Nets often converge to the **Identity Function** ($f(x)=x$) because the blurred input and sharp output are statistically very similar. This is known as the "Identity Trap".
 
 To counter this, we formulated the network to predict the **residual** (the blur noise) rather than the image itself:
-$$ \hat{y} = x + \mathcal{F}(x) $$
+
+```math
+\hat{y} = x + \mathcal{F}(x)
+```
+
 where $x$ is the blurred input and $\mathcal{F}(x)$ is the residual learned by the U-Net.
 
 *   **Implementation:** A skip connection adds the input directly to the output.
@@ -63,7 +73,10 @@ where $x$ is the blurred input and $\mathcal{F}(x)$ is the residual learned by t
 
 We utilized the **Charbonnier Loss** (a differentiable variant of L1 loss). Unlike MSE (L2), which penalizes large errors heavily and leads to oversmoothed images, Charbonnier Loss is more robust to outliers and preserves edges better.
 
-$$ \mathcal{L}(y, \hat{y}) = \sqrt{(y - \hat{y})^2 + \epsilon^2} $$
+```math
+\mathcal{L}(y, \hat{y}) = \sqrt{(y - \hat{y})^2 + \epsilon^2}
+```
+
 with $\epsilon = 10^{-3}$.
 
 ### 2.3. Training Strategy
