@@ -18,6 +18,8 @@ Image deblurring is a classic ill-posed problem in computer vision, where the go
 
 This project addresses the challenge of deploying effective deblurring models on constrained hardware (e.g., Apple Silicon MPS, Google Colab Free Tier). Our objective was to design a "Lightweight" U-Net capable of surpassing a PSNR threshold of **28.5 dB** on the GoPro dataset, optimizing for both parameter efficiency and inference speed.
 
+**Context:** This project was developed as part of an AI competition. A separate, hidden Test Set will be released shortly to evaluate the model's performance in a completely unbiased manner.
+
 ---
 
 ## 2. Methodology
@@ -92,7 +94,7 @@ We implemented a strict **Sequence Split**:
 *   **Result:** The validation set contains scenes completely unseen during training, providing a true measure of generalization while allowing the model to learn from more data.
 
 #### 2.3.2. Scheduler: Cosine Annealing
-In Run V1, we used `ReduceLROnPlateau`, which resulted in premature stagnation. For the final model, we switched to **Cosine Annealing LR**. This scheduler follows a cosine curve to decay the learning rate from $\eta_{max} = 2 \cdot 10^{-4}$ to $\eta_{min} = 10^{-6}$ over 150 epochs. This forces the model to settle into a sharp local minimum at the end of training.
+In Run V1, we used `ReduceLROnPlateau`, which resulted in premature stagnation. For the final model, we switched to `Cosine Annealing LR`. This scheduler follows a cosine curve to decay the learning rate from $\eta_{max} = 2 \cdot 10^{-4}$ to $\eta_{min} = 10^{-6}$ over 150 epochs. This forces the model to settle into a sharp local minimum at the end of training.
 
 ---
 
@@ -107,6 +109,10 @@ In Run V1, we used `ReduceLROnPlateau`, which resulted in premature stagnation. 
 ### 3.2. Ablation Studies & Run History
 
 Detailed logs can be found in `notes.md`.
+
+*   **Note on Validation Sets:**
+    *   **Runs V1 & V2:** Used the original dataset split (~1k validation images).
+    *   **Runs V3 & V4:** Used the new **Sequence Split** logic (approx. 15% validation), which is still rigorous and prevents data leakage.
 
 | Experiment | Config | PSNR (Val) | Key Observation |
 | :--- | :--- | :--- | :--- |
