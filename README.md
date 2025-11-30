@@ -113,7 +113,7 @@ Detailed implementation can be found in `train_experiments.ipynb`.
 Detailed logs can be found in `notes.md`.
 
 *   **Note on Validation Sets:**
-    *   **Runs V1 & V2:** Used the original dataset split (~1k validation images).
+    *   **Runs V1 & V2:** Used the original dataset split (~1k validation images). **Correction:** In these early runs, rotation augmentation was accidentally enabled for the validation set, which artificially lowered the validation scores as the model had to handle random orientations during evaluation.
     *   **Runs V3 & V4:** Used the new **Sequence Split** logic (approx. 15% validation), which is still rigorous and prevents data leakage.
 
 | Experiment | Config | PSNR (Val) | Key Observation |
