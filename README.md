@@ -225,6 +225,7 @@ Transitioning from classification to restoration required unlearning standard pr
 1.  **No Max Pooling:** In classification, pooling reduces dimensions to find "what" is in the image. In deblurring, we need to preserve "where" everything is. We used **Strided Convolutions** instead to downsample while learning spatial features.
 2.  **No Dropout:** Dropout destroys spatial information and introduces noise. For pixel-perfect reconstruction, this is detrimental. We relied on **Data Augmentation** and **Weight Decay** for regularization instead.
 3.  **The Power of Residuals:** My first attempts failed to converge (stuck at identity). Understanding that it's easier for a network to learn "zero" (the noise) than "everything" (the image) was the turning point that allowed the model to work.
+4.  **Encoder-Decoder Architecture:** I grasped the intuition behind using an Encoder-Decoder structure for reconstruction. The **Encoder** compresses the image into a compact latent representation (capturing the semantic "context"), while the **Decoder** learns to reconstruct the spatial details from this representation. The skip connections bridge these two worlds, allowing the decoder to recover fine details lost during downsampling.
 
 ### Time Constraints & Future Scope
 This entire project was completed in **one week**. Given this tight timeframe and hardware limitations, I had to prioritize a robust baseline over extensive hyperparameter tuning.
