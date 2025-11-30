@@ -158,8 +158,11 @@ To verify that our results were not due to a "lucky" data split, we trained a se
 
 At first glance, V4 seems worse. However, when we evaluated the **V3 model on the V4 validation split**, its performance dropped to **27.44 dB**. This confirms that the V4 validation split is intrinsically "harder" than V3's.
 
+![Training Curves V4](experiments/unet_light_v4_123/training_curves.png)
+*Figure 4: Training dynamics for Run V4. Convergence is similar to V3, but plateaus at a lower PSNR due to the harder validation set.*
+
 ![PSNR Distribution](experiments/unet_light_v4_123/psnr_distribution.png)
-*Figure 4: PSNR Distribution comparison on the V4 Validation Set. The V4 model (Blue) performs comparably to the V3 "Golden" model (Orange).*
+*Figure 5: PSNR Distribution comparison on the V4 Validation Set. The V4 model (Blue) performs comparably to the V3 "Golden" model (Orange).*
 
 **Crucial Observation on Generalization:**
 The V3 model achieves 27.44 dB on the V4 split, which is slightly higher than V4's 27.21 dB. However, this comparison is biased in favor of V3. Since the splits are random, **some sequences in the V4 Validation set were likely present in the V3 Training set**.
