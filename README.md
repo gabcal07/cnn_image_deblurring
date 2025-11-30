@@ -172,16 +172,17 @@ The V3 model achieves 27.44 dB on the V4 split, which is slightly higher than V4
 ## 4. Usage
 
 ### 4.1. Installation
+This project uses `uv` for dependency management.
+
 ```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install torch torchvision torchaudio matplotlib tqdm pillow numpy
+# Install dependencies
+uv sync
 ```
 
 ### 4.2. Training
 To reproduce the results of **Run V3**:
 ```bash
-python src/train.py \
+uv run src/train.py \
   --data_root ./data \
   --experiment_name unet_light_v3 \
   --start_filters 48 \
@@ -195,10 +196,10 @@ The `inference.py` script supports **Tiled Inference** to handle high-resolution
 
 ```bash
 # Generate a side-by-side comparison (Input vs Output)
-python src/inference.py --input path/to/blurred.png --output comparison.png --test
+uv run src/inference.py --input path/to/blurred.png --output comparison.png --test
 
 # Process an entire folder
-python src/inference.py --input ./data/test/blur --output ./results
+uv run src/inference.py --input ./data/test/blur --output ./results
 ```
 
 ---
