@@ -101,7 +101,7 @@ In Run V1, we used `ReduceLROnPlateau`, which resulted in premature stagnation. 
 ## 3. Experiments & Results
 
 ### 3.1. Experimental Setup
-*   **Dataset:** GoPro Large Dataset (2103 training pairs, sequence split).
+*   **Dataset:** [GoPro Large Dataset](https://seungjunnah.github.io/Datasets/gopro) (2103 training pairs, sequence split).
 *   **Hardware:** Apple M1/M2 (MPS Acceleration).
 *   **Input:** 256x256 Random Crops (Train), Full Resolution Tiled (Val).
 *   **Optimizer:** AdamW (`weight_decay=1e-3`).
@@ -223,6 +223,11 @@ Transitioning from classification to restoration required unlearning standard pr
 1.  **No Max Pooling:** In classification, pooling reduces dimensions to find "what" is in the image. In deblurring, we need to preserve "where" everything is. We used **Strided Convolutions** instead to downsample while learning spatial features.
 2.  **No Dropout:** Dropout destroys spatial information and introduces noise. For pixel-perfect reconstruction, this is detrimental. We relied on **Data Augmentation** and **Weight Decay** for regularization instead.
 3.  **The Power of Residuals:** My first attempts failed to converge (stuck at identity). Understanding that it's easier for a network to learn "zero" (the noise) than "everything" (the image) was the turning point that allowed the model to work.
+
+### Time Constraints & Future Scope
+This entire project was completed in **one week**. Given this tight timeframe and hardware limitations, I had to prioritize a robust baseline over extensive hyperparameter tuning.
+*   **With more resources (Powerful GPUs):** I would have liked to explore and fine-tune the hyperparameters of the learning tools and the architecture more deeply.
+*   **With more time:** I would have liked to generate more blurry images from sharp images to augment the dataset, but I did not have time to pursue those ideas.
 
 ---
 
