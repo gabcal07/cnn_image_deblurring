@@ -1,7 +1,7 @@
 [project]
-name = "project"
-version = "0.1.0"
-description = "Add your description here"
+name = "Unet-Lightweight-Deblurring"
+version = "1.0.0"
+description = "A lightweight U-Net for image deblurring on constrained hardware."
 readme = "README.md"
 requires-python = ">=3.12.9"
 dependencies = [
