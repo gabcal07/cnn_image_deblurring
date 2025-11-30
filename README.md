@@ -100,10 +100,12 @@ In Run V1, we used `ReduceLROnPlateau`, which resulted in premature stagnation. 
 
 ## 3. Experiments & Results
 
+Detailed implementation can be found in `train_experiments.ipynb`.
+
 ### 3.1. Experimental Setup
-*   **Dataset:** [GoPro Large Dataset](https://seungjunnah.github.io/Datasets/gopro) (2103 training pairs, sequence split).
-*   **Hardware:** Apple M1/M2 (MPS Acceleration).
-*   **Input:** 256x256 Random Crops (Train), Full Resolution Tiled (Val).
+*   **Dataset:** [GoPro Large Dataset](https://seungjunnah.github.io/Datasets/gopro) (~2k training pairs, ~1k validation pairs).
+*   **Hardware:** Apple M3, 16Gb RAM (MPS Acceleration).
+*   **Input:** 256x256 Random Crops (Train), 256x256 Center Crops (Val).
 *   **Optimizer:** AdamW (`weight_decay=1e-3`).
 
 ### 3.2. Ablation Studies & Run History
