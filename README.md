@@ -206,7 +206,7 @@ uv run src/inference.py --input ./data/test/blur --output ./results
 
 ## 5. Conclusion
 
-We successfully developed a lightweight deblurring model that achieves high performance (**31.15 dB PSNR**) through architectural efficiency and rigorous training methodology. The use of **Global Residual Learning** and **Cosine Annealing** were critical factors in overcoming the optimization difficulties inherent in image restoration. The failure of the "No-Norm" experiment confirms that for this specific lightweight architecture, Instance Normalization is essential for stability.
+We successfully developed a lightweight deblurring model that achieves high performance (**31.15 dB PSNR**) on ~400 images validation set through architectural efficiency and rigorous training methodology. Overall the expected average **PSNR** on the secret test set is around 28dB. The use of **Global Residual Learning** and **Cosine Annealing** were critical factors in overcoming the optimization difficulties inherent in image restoration. The failure of the "No-Norm" experiment confirms that for this specific lightweight architecture, Instance Normalization is essential for stability.
 
 ---
 
