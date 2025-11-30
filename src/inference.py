@@ -5,8 +5,25 @@ import argparse
 import os
 import sys
 import matplotlib.pyplot as plt
+import numpy as np
+from tqdm import tqdm
 
 sys.path.append(os.getcwd())
+
+from src.utils.metrics import calculate_psnr
+
+
+def get_image_files(root_dir):
+    """Recursively find all image files in a directory."""
+    extensions = {".png", ".jpg", ".jpeg", ".bmp", ".tiff"}
+    files_list = []
+    for root, _, files in os.walk(root_dir):
+        for file in files:
+            if os.path.splitext(file)[1].lower() in extensions:
+                full_path = os.path.join(root, file)
+                rel_path = os.path.relpath(full_path, root_dir)
+                files_list.append((full_path, rel_path))
+    return sorted(files_list)
 
 
 def load_image(path):
@@ -94,6 +111,12 @@ def main():
         action="store_true",
         help="Save comparison figure instead of just output",
     )
+    parser.add_argument(
+        "--ground_truth",
+        type=str,
+        default=None,
+        help="Path to sharp images (folder or file) for PSNR calculation",
+    )
     args = parser.parse_args()
 
     # 1. Device Setup
@@ -130,23 +153,95 @@ def main():
     # 3. Process
     if os.path.isdir(args.input):
         print(f"Processing folder: {args.input}")
-        os.makedirs(args.output, exist_ok=True)
-        for filename in os.listdir(args.input):
-            if filename.lower().endswith((".png", ".jpg", ".jpeg")):
-                in_path = os.path.join(args.input, filename)
-                out_path = os.path.join(args.output, f"deblurred_{filename}")
+        
+        image_files = get_image_files(args.input)
+        print(f"Found {len(image_files)} images.")
+        
+        psnr_values = []
 
-                img = load_image(in_path)
-                res = predict_tiled(model, img, device=device)
-                if args.test:
-                    save_comparison(img, res, out_path)
+        for in_path, rel_path in tqdm(image_files, desc="Deblurring"):
+            # Construct output path preserving structure
+            out_path = os.path.join(args.output, rel_path)
+            os.makedirs(os.path.dirname(out_path), exist_ok=True)
+
+            img = load_image(in_path)
+            res = predict_tiled(model, img, device=device)
+            
+            # Calculate PSNR if ground truth is provided
+            if args.ground_truth:
+                # Try to find GT with same relative path
+                gt_path = os.path.join(args.ground_truth, rel_path)
+                
+                if os.path.exists(gt_path):
+                    gt_img = load_image(gt_path).to(device)
+                    # Ensure dimensions match
+                    if res.shape != gt_img.shape:
+                            print(f"Warning: Shape mismatch for {rel_path}. Res: {res.shape}, GT: {gt_img.shape}")
+                    else:
+                        current_psnr = calculate_psnr(res, gt_img).item()
+                        psnr_values.append(current_psnr)
+                        # print(f"Processed {rel_path} | PSNR: {current_psnr:.2f} dB") # Too verbose for tqdm
                 else:
-                    save_image(res, out_path)
+                    # Fallback: check if GT folder is flat but input is nested (or vice versa)
+                    # This is a simple heuristic: check if filename exists in GT root
+                    filename = os.path.basename(rel_path)
+                    flat_gt_path = os.path.join(args.ground_truth, filename)
+                    if os.path.exists(flat_gt_path):
+                         gt_img = load_image(flat_gt_path).to(device)
+                         if res.shape == gt_img.shape:
+                            current_psnr = calculate_psnr(res, gt_img).item()
+                            psnr_values.append(current_psnr)
+                    else:
+                        pass # GT not found
+            
+            # Always save the result
+            if args.test:
+                save_comparison(img, res, out_path)
+            else:
+                save_image(res, out_path)
+        
+        # Summary statistics
+        if psnr_values:
+            mean_psnr = np.mean(psnr_values)
+            print(f"\n{'='*40}")
+            print(f"Average PSNR: {mean_psnr:.2f} dB")
+            print(f"Min PSNR: {np.min(psnr_values):.2f} dB")
+            print(f"Max PSNR: {np.max(psnr_values):.2f} dB")
+            print(f"{'='*40}")
+
+            # Plot distribution
+            plt.figure(figsize=(10, 6))
+            plt.hist(psnr_values, bins=20, color='skyblue', edgecolor='black', alpha=0.7)
+            plt.title(f"PSNR Distribution (Mean: {mean_psnr:.2f} dB)")
+            plt.xlabel("PSNR (dB)")
+            plt.ylabel("Count")
+            plt.axvline(mean_psnr, color='red', linestyle='dashed', linewidth=2, label=f'Mean: {mean_psnr:.2f}')
+            plt.legend()
+            plt.grid(axis='y', alpha=0.3)
+            
+            dist_path = os.path.join(args.output, "psnr_distribution.png")
+            plt.savefig(dist_path)
+            print(f"PSNR distribution saved to {dist_path}")
+
     else:
         # Image unique
         print(f"Processing file: {args.input}")
         img = load_image(args.input)
         res = predict_tiled(model, img, device=device)
+        
+        if args.ground_truth:
+             if os.path.isdir(args.ground_truth):
+                 # Try to find file with same name
+                 filename = os.path.basename(args.input)
+                 gt_path = os.path.join(args.ground_truth, filename)
+             else:
+                 gt_path = args.ground_truth
+            
+             if os.path.exists(gt_path):
+                gt_img = load_image(gt_path).to(device)
+                psnr = calculate_psnr(res, gt_img).item()
+                print(f"PSNR: {psnr:.2f} dB")
+        
         if args.test:
             save_comparison(img, res, args.output)
         else:
