@@ -8,7 +8,8 @@ wheels/
 
 # Virtual environments
 .venv
-data/
+data/train
+data/test
 *.DS_Store
 experiments/unet_light_no_norm_v4
 experiments/simple_unet_l1/
