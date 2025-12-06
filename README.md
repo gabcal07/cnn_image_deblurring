@@ -8,7 +8,7 @@
 
 ## 📄 Abstract
 
-This study presents a lightweight Convolutional Neural Network (CNN) for single-image deblurring, designed to operate efficiently on consumer-grade hardware. By leveraging **Depthwise Separable Convolutions** and a **Global Residual Learning** strategy, we achieve a model with approximately **6.8 million parameters**—a massive reduction from standard U-Net architectures (~30M)—while maintaining high reconstruction quality. Our final model achieves a Peak Signal-to-Noise Ratio (PSNR) of **31.15 dB** on the GoPro dataset validation split, demonstrating that efficient architecture design combined with rigorous training strategies (Cosine Annealing, Sequence Splitting) can yield state-of-the-art competitive results with limited computational resources.
+This study presents a lightweight Convolutional Neural Network (CNN) for single-image deblurring, designed to operate efficiently on consumer-grade hardware. This project took place in the context of a 1 week competition to make the best model for the GoPro Dataset. This project allowed me to get the first place out of 20 participants. By leveraging **Depthwise Separable Convolutions** and a **Global Residual Learning** strategy, we achieve a model with approximately **6.8 million parameters**—a massive reduction from standard U-Net architectures (~30M)—while maintaining high reconstruction quality. Our final model achieves a Peak Signal-to-Noise Ratio (PSNR) of **31.15 dB** on the GoPro dataset validation split, demonstrating that efficient architecture design combined with rigorous training strategies (Cosine Annealing, Sequence Splitting) can yield competitive results with limited computational resources.
 
 ---
 
